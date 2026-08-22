@@ -82,3 +82,71 @@ def write_tracks_csv(rows, output_csv_path):
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def detect_track(video_path, output_csv_path, srt_path=None, conf_threshold=0.25, hfov_deg=84.0, device="0"):
+    """Run YOLOv8n + BoT-SORT over video_path and write per-track detections to output_csv_path.
+
+    If srt_path is given, altitude-based LGV/HGV classification is used;
+    otherwise the same-frame relative-area fallback is used. device="0" uses
+    the first CUDA GPU (decisions.md 1.1: local RTX 4050 is primary compute).
+    """
+    import cv2
+    from ultralytics import YOLO
+
+    telemetry = None
+    if srt_path is not None:
+        from src.srt_telemetry import parse_srt
+        telemetry = parse_srt(srt_path)
+
+    cap = cv2.VideoCapture(video_path)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    cap.release()
+    if not fps or fps <= 0:
+        raise ValueError(f"Could not read a valid FPS from {video_path}")
+
+    model = YOLO("yolov8n.pt")
+    results_stream = model.track(
+        source=video_path,
+        tracker="botsort.yaml",
+        conf=conf_threshold,
+        classes=list(COCO_CLASS_NAMES.keys()),
+        persist=True,
+        stream=True,
+        verbose=False,
+        device=device,
+    )
+
+    all_rows = []
+    frame_width_px = None
+
+    for frame_idx, result in enumerate(results_stream):
+        if frame_width_px is None:
+            frame_width_px = result.orig_shape[1]
+
+        boxes = result.boxes
+        if boxes is None or boxes.id is None:
+            continue
+
+        timestamp_ms = int(frame_idx * (1000.0 / fps))
+
+        altitude_m = None
+        if telemetry is not None:
+            from src.srt_telemetry import altitude_at_timestamp
+            altitude_m = altitude_at_timestamp(telemetry, timestamp_ms)
+
+        rows = build_rows_from_frame(
+            frame_idx=frame_idx,
+            timestamp_ms=timestamp_ms,
+            track_ids=boxes.id.tolist(),
+            class_ids=boxes.cls.tolist(),
+            boxes_xyxy=boxes.xyxy.tolist(),
+            confs=boxes.conf.tolist(),
+            altitude_m=altitude_m,
+            frame_width_px=frame_width_px,
+            hfov_deg=hfov_deg,
+        )
+        all_rows.extend(rows)
+
+    write_tracks_csv(all_rows, output_csv_path)
+    return output_csv_path
