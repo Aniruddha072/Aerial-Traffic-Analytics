@@ -49,6 +49,42 @@ def compute_od_matrix(csv_path, zones):
     return {"od_counts": od_counts, "unmatched": unmatched}
 
 
+def compute_od_matrix_from_labels(csv_path, zone_labels, mask_width, mask_height, frame_width_px, frame_height_px):
+    """Same idea as compute_od_matrix, but zones come from a pixel-label
+    array (src.zone_assignment.assign_zones_bfs output) instead of hand-drawn
+    polygons -- geodesic nearest-arm assignment through the actual road
+    shape, not straight-line point-in-polygon. Label -1 means "not on the
+    road region at all" (counted as unmatched).
+    """
+    scale_x = mask_width / frame_width_px
+    scale_y = mask_height / frame_height_px
+
+    def zone_for(point):
+        x, y = point
+        mx = min(max(int(x * scale_x), 0), mask_width - 1)
+        my = min(max(int(y * scale_y), 0), mask_height - 1)
+        label = zone_labels[my, mx]
+        return int(label) if label >= 0 else None
+
+    by_track = defaultdict(list)
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            by_track[row["track_id"]].append(row)
+
+    od_counts = Counter()
+    unmatched = 0
+    for rows in by_track.values():
+        rows.sort(key=lambda r: int(r["frame"]))
+        entry_zone = zone_for(_center(rows[0]))
+        exit_zone = zone_for(_center(rows[-1]))
+        if entry_zone is None or exit_zone is None:
+            unmatched += 1
+            continue
+        od_counts[(entry_zone, exit_zone)] += 1
+
+    return {"od_counts": od_counts, "unmatched": unmatched}
+
+
 def time_windowed_counts(csv_path, window_ms):
     """Bucket unique tracks into time windows of window_ms, keyed by each
     track's first-seen timestamp. Returns {window_index: {class: count}}."""
