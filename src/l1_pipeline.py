@@ -84,6 +84,35 @@ def write_tracks_csv(rows, output_csv_path):
         writer.writerows(rows)
 
 
+def reclassify_truck_rows(input_csv_path, frames, frame_width_px, output_csv_path, hfov_deg=84.0):
+    """Re-derive LGV/HGV classification for existing truck rows using real altitude.
+
+    Rows already classified LGV or HGV came from classify_truck_fallback() at
+    detection time (no altitude was available then). This re-runs the more
+    precise altitude-based classify_truck() now that real telemetry (`frames`,
+    a list of objects with .timestamp_ms and .rel_altitude_m -- as returned by
+    src.srt_telemetry.parse_srt()) is available, without re-running detection.
+    Non-truck rows (car/bus/motorcycle/pedestrian) pass through unchanged.
+    """
+    from src.srt_telemetry import altitude_at_timestamp
+
+    with open(input_csv_path, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    for row in rows:
+        if row["class"] not in ("LGV", "HGV"):
+            continue
+        altitude_m = altitude_at_timestamp(frames, int(row["timestamp_ms"]))
+        bbox = (float(row["x1"]), float(row["y1"]), float(row["x2"]), float(row["y2"]))
+        row["class"] = classify_truck(bbox, altitude_m, frame_width_px, hfov_deg)
+
+    os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
+    with open(output_csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def detect_track(
     video_path,
     output_csv_path,

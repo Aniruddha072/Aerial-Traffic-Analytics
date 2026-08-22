@@ -1,5 +1,10 @@
 import csv
-from src.l1_pipeline import build_rows_from_frame, write_tracks_csv, CSV_FIELDS
+from src.l1_pipeline import (
+    build_rows_from_frame,
+    write_tracks_csv,
+    reclassify_truck_rows,
+    CSV_FIELDS,
+)
 
 
 def test_build_rows_from_frame_maps_known_classes():
@@ -56,6 +61,53 @@ def test_build_rows_from_frame_truck_dropped_without_altitude_or_cars():
         track_ids=[1], class_ids=[7], boxes_xyxy=[[0, 0, 200, 20]], confs=[0.7],
     )
     assert rows == []
+
+
+def test_reclassify_truck_rows_uses_real_altitude(tmp_path):
+    # Row 2 was mislabeled HGV by the fallback method at detection time;
+    # at 100m altitude its 60px bbox works out to ~5.6m real-world length,
+    # under the 7m threshold, so the altitude-based method says LGV instead.
+    csv_content = (
+        "track_id,frame,timestamp_ms,class,x1,y1,x2,y2,conf\n"
+        "1,0,0,car,0,0,50,25,0.9\n"
+        "2,0,0,HGV,0,0,60,30,0.7\n"
+    )
+    csv_path = tmp_path / "in.csv"
+    csv_path.write_text(csv_content, encoding="utf-8")
+
+    class FakeFrame:
+        def __init__(self, timestamp_ms, rel_altitude_m):
+            self.timestamp_ms = timestamp_ms
+            self.rel_altitude_m = rel_altitude_m
+
+    frames = [FakeFrame(0, 100)]
+    out_path = tmp_path / "out.csv"
+
+    reclassify_truck_rows(str(csv_path), frames, frame_width_px=1920, output_csv_path=str(out_path))
+
+    with open(out_path, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 2
+    assert rows[0]["class"] == "car"  # untouched
+    assert rows[1]["class"] == "LGV"  # re-derived from altitude, was HGV
+
+
+def test_reclassify_truck_rows_leaves_non_truck_rows_untouched(tmp_path):
+    csv_content = (
+        "track_id,frame,timestamp_ms,class,x1,y1,x2,y2,conf\n"
+        "1,0,0,pedestrian,0,0,10,20,0.9\n"
+        "2,0,0,bus,0,0,60,30,0.8\n"
+    )
+    csv_path = tmp_path / "in.csv"
+    csv_path.write_text(csv_content, encoding="utf-8")
+
+    out_path = tmp_path / "out.csv"
+    reclassify_truck_rows(str(csv_path), frames=[], frame_width_px=1920, output_csv_path=str(out_path))
+
+    with open(out_path, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert rows[0]["class"] == "pedestrian"
+    assert rows[1]["class"] == "bus"
 
 
 def test_write_tracks_csv_round_trip(tmp_path):
