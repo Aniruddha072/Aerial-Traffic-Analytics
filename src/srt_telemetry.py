@@ -10,6 +10,7 @@ extraction): each block is a frame count + timestamp on one line
 LGV/HGV split, but useful for L4's spatial grounding later).
 """
 
+import bisect
 import re
 from dataclasses import dataclass
 
@@ -71,8 +72,21 @@ def parse_srt(path):
 
 
 def altitude_at_timestamp(frames, timestamp_ms):
-    """Return the rel_altitude_m of the telemetry frame closest to timestamp_ms."""
+    """Return the rel_altitude_m of the telemetry frame closest to timestamp_ms.
+
+    frames must be sorted by timestamp_ms (parse_srt returns them sorted by
+    frame_idx, which is timestamp-ordered for a constant frame rate). Uses
+    binary search -- O(log n) instead of a linear scan, which matters when
+    this is called per-row over hundreds of thousands of detections.
+    """
     if not frames:
         raise ValueError("frames is empty")
-    closest = min(frames, key=lambda f: abs(f.timestamp_ms - timestamp_ms))
-    return closest.rel_altitude_m
+    i = bisect.bisect_left(frames, timestamp_ms, key=lambda f: f.timestamp_ms)
+    if i == 0:
+        return frames[0].rel_altitude_m
+    if i == len(frames):
+        return frames[-1].rel_altitude_m
+    before, after = frames[i - 1], frames[i]
+    if abs(before.timestamp_ms - timestamp_ms) <= abs(after.timestamp_ms - timestamp_ms):
+        return before.rel_altitude_m
+    return after.rel_altitude_m
