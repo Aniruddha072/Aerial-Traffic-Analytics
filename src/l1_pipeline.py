@@ -84,12 +84,28 @@ def write_tracks_csv(rows, output_csv_path):
         writer.writerows(rows)
 
 
-def detect_track(video_path, output_csv_path, srt_path=None, conf_threshold=0.25, hfov_deg=84.0, device="0"):
-    """Run YOLOv8n + BoT-SORT over video_path and write per-track detections to output_csv_path.
+def detect_track(
+    video_path,
+    output_csv_path,
+    srt_path=None,
+    conf_threshold=0.15,
+    hfov_deg=84.0,
+    device="0",
+    model_path="yolov8s.pt",
+    imgsz=1280,
+):
+    """Run YOLOv8 + BoT-SORT over video_path and write per-track detections to output_csv_path.
 
     If srt_path is given, altitude-based LGV/HGV classification is used;
     otherwise the same-frame relative-area fallback is used. device="0" uses
     the first CUDA GPU (decisions.md 1.1: local RTX 4050 is primary compute).
+
+    model_path/imgsz default to yolov8s.pt at 1280px (decisions.md 3) rather
+    than yolov8n.pt at the default 640px -- on 4K source footage, 640px
+    shrinks small objects (pedestrians, motorcycles, distant vehicles) past
+    the point the model can see them. We're decode-bound not compute-bound
+    (spec: GPU sits at 15-35% utilization), so the larger model/imgsz costs
+    little extra wall time here.
     """
     import cv2
     from ultralytics import YOLO
@@ -105,11 +121,12 @@ def detect_track(video_path, output_csv_path, srt_path=None, conf_threshold=0.25
     if not fps or fps <= 0:
         raise ValueError(f"Could not read a valid FPS from {video_path}")
 
-    model = YOLO("yolov8n.pt")
+    model = YOLO(model_path)
     results_stream = model.track(
         source=video_path,
         tracker="botsort.yaml",
         conf=conf_threshold,
+        imgsz=imgsz,
         classes=list(COCO_CLASS_NAMES.keys()),
         persist=True,
         stream=True,

@@ -15,3 +15,11 @@ Running log of non-obvious choices and why we made them. Dated records — don't
 ## Decision 2 — Problem scope (event day, 2026-08-22)
 
 **2.1 — Levels unlock sequentially; build for L1 first, but design with L2–L5 in mind.** The platform locks L2 until L1 is submitted, so there's no benefit to skipping ahead — but L4 (spatial grounding via SRT telemetry) and L5 (network reasoning) both consume the same trajectory output L1 produces. Worth keeping the L1 output schema (track ID, class, per-frame bbox + timestamp) generic enough that later levels don't require a rewrite.
+
+## Decision 3 — L1 detection quality: bigger model + imgsz over default (event day, first full run)
+
+The first full run (YOLOv8n, default imgsz=640, conf=0.25) visibly missed a lot of vehicles, motorcycles, and pedestrians on inspection. Root cause: source footage is 4K (3840x2160); Ultralytics resizes every frame to imgsz before inference, so at 640px a pedestrian that's a few dozen pixels wide in the source becomes a handful of pixels — below what the model can reliably detect. YOLOv8n (nano) also has the weakest small-object recall in the family.
+
+**Fix:** switched to `yolov8s.pt` at `imgsz=1280`, `conf=0.15` (was `yolov8n.pt`/640/0.25). Justified by GPU utilization sitting at 15-35% during the first run — we're decode-bound (4K video decode is CPU-bound), not compute-bound, so a bigger model and larger inference size should cost relatively little extra wall time. Validated on a short segment before committing to a full re-run on both videos (see progress.md for the before/after comparison).
+
+**Not done:** tiled/sliced inference (running detection on cropped high-res tiles instead of one downsized frame) would likely help small-object recall even more, but adds real complexity and per-frame cost; treated as a stretch goal if L1 still underperforms after this change, not a first move.

@@ -13,3 +13,6 @@ outputs/
 runs/
 .agents/
 .claude/
+docs/progress.md
+docs/handoff.md
+docs/explanations.md
