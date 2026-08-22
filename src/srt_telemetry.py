@@ -1,9 +1,13 @@
-"""Parser for DJI-style SRT telemetry sidecar files.
+"""Parser for DJI-style SRT telemetry, extracted from the hackathon video's
+embedded subtitle stream (not a sidecar file -- see docs/decisions.md
+Decision 4: `ffmpeg -i <video> -map 0:s:0 <out>.srt`).
 
-Format assumption (spec open question): each block carries a SrtCnt frame
-index, an SRT timecode for timestamp, and [latitude: ..] [longitude: ..]
-[rel_alt: .. abs_alt: ..] fields. If the real hackathon SRT files use a
-different layout, adjust _BLOCK_RE below against the actual file content.
+Confirmed format (2026-08-22, against the real Intersection_Merged.MP4
+extraction): each block is a frame count + timestamp on one line
+("FrameCnt: <n> <date> <time>"), followed by a bracket-field line including
+[latitude: ..] [longitude: ..] [rel_alt: .. abs_alt: ..] (also carries
+[gb_yaw/gb_pitch/gb_roll: ..] -- not parsed here, not needed for L1's
+LGV/HGV split, but useful for L4's spatial grounding later).
 """
 
 import re
@@ -23,8 +27,7 @@ class TelemetryFrame:
 _BLOCK_RE = re.compile(
     r"(\d+)\s*\n"
     r"(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->.*?\n"
-    r".*?SrtCnt\s*:\s*(\d+).*?\n"
-    r".*?\n"
+    r".*?FrameCnt:\s*(\d+).*?\n"
     r".*?latitude:\s*([-\d.]+)\].*?longitude:\s*([-\d.]+)\].*?"
     r"rel_alt:\s*([-\d.]+)\s+abs_alt:\s*([-\d.]+)",
     re.DOTALL,

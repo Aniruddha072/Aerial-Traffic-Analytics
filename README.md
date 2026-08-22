@@ -42,7 +42,7 @@ See the [Visual Intelligence Playbook](https://claude.ai/code/artifact/addc13d5-
 
 ```bash
 python -m venv venv
-venv/Scripts/pip install -r requirements.txt   # TODO: freeze once L1 pipeline exists
+venv/Scripts/pip install -r requirements.txt
 ```
 
 `.env` holds `GEMINI_API_KEY` (gitignored).
