@@ -1,0 +1,15 @@
+venv/
+.env
+__pycache__/
+*.pyc
+*.pt
+data/
+logs/
+*.mp4
+*.MP4
+*.mov
+*.avi
+outputs/
+runs/
+.agents/
+.claude/
