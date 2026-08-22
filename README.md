@@ -2,8 +2,6 @@
 
 Solo entry — build a traffic analysis agent from raw drone footage. No annotations given; the platform scores depth of derived insight, not just detection accuracy.
 
-- **Hackathon ID:** `aa2c5b58-2047-44bb-9902-45c05c1530cf`
-- **Dashboard:** https://fbhackathonplatform-production.up.railway.app/participant/p_0-S4Pl
 - **Event day:** 2026-08-22, remote track
 
 ## The problem
@@ -52,5 +50,5 @@ venv/Scripts/pip install -r requirements.txt   # TODO: freeze once L1 pipeline e
 ## Docs
 
 - [docs/decisions.md](docs/decisions.md) — why we chose what we chose
-- [docs/progress.md](docs/progress.md) — live build log
-- [docs/handoff.md](docs/handoff.md) — pick-up-where-we-left-off notes
+- [docs/superpowers/specs/](docs/superpowers/specs/) — design specs
+- [docs/superpowers/plans/](docs/superpowers/plans/) — implementation plans
